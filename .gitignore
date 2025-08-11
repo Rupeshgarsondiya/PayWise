@@ -78,3 +78,6 @@ Thumbs.db
 # data/
 # *.csv
 # *.json
+
+# Specific test files
+test_trocr.py
