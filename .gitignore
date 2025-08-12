@@ -81,3 +81,7 @@ Thumbs.db
 
 # Specific test files
 test_trocr.py
+
+# Node.js dependencies
+node_modules/
+package-lock.json
