@@ -1,18 +1,19 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.auth import authenticate
 
 User = get_user_model()
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
+    firstName = serializers.CharField(source='first_name', max_length=30)
+    lastName = serializers.CharField(source='last_name', max_length=30)
     password = serializers.CharField(write_only=True, validators=[validate_password])
-    confirm_password = serializers.CharField(write_only=True)
-    agree_to_terms = serializers.BooleanField(write_only=True)
+    confirmPassword = serializers.CharField(write_only=True)
+    agreeToTerms = serializers.BooleanField(write_only=True)
 
     class Meta:
         model = User
-        fields = ('email', 'first_name', 'last_name', 'password', 'confirm_password', 'agree_to_terms')
+        fields = ('email', 'firstName', 'lastName', 'password', 'confirmPassword', 'agreeToTerms')
 
     def validate_email(self, value):
         if User.objects.filter(email=value).exists():
@@ -20,17 +21,18 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        if attrs['password'] != attrs['confirm_password']:
-            raise serializers.ValidationError("Passwords do not match.")
+        if attrs['password'] != attrs['confirmPassword']:
+            raise serializers.ValidationError({"confirmPassword": "Passwords do not match."})
         
-        if not attrs['agree_to_terms']:
-            raise serializers.ValidationError("You must agree to the terms and conditions.")
+        if not attrs.get('agreeToTerms', False):
+            raise serializers.ValidationError({"agreeToTerms": "You must agree to the terms and conditions."})
         
         return attrs
 
     def create(self, validated_data):
-        validated_data.pop('confirm_password')
-        validated_data.pop('agree_to_terms')
+        # Remove extra fields
+        validated_data.pop('confirmPassword', None)
+        validated_data.pop('agreeToTerms', None)
         
         user = User.objects.create_user(
             username=validated_data['email'],
@@ -44,6 +46,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 class UserLoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField()
+    rememberMe = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
         email = attrs.get('email')
@@ -58,14 +61,14 @@ class UserLoginSerializer(serializers.Serializer):
                 else:
                     raise serializers.ValidationError('User account is disabled.')
             else:
-                raise serializers.ValidationError('Unable to log in with provided credentials.')
+                raise serializers.ValidationError('Invalid email or password.')
         else:
-            raise serializers.ValidationError('Must include "email" and "password".')
+            raise serializers.ValidationError('Must include email and password.')
 
 class UserSerializer(serializers.ModelSerializer):
+    firstName = serializers.CharField(source='first_name')
+    lastName = serializers.CharField(source='last_name')
+    
     class Meta:
         model = User
-        fields = ('id', 'email', 'first_name', 'last_name', 'is_email_verified')
-
-class GoogleAuthSerializer(serializers.Serializer):
-    code = serializers.CharField()
+        fields = ('id', 'email', 'firstName', 'lastName', 'is_email_verified')
