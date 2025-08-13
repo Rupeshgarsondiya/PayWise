@@ -28,9 +28,6 @@ aiohttp==3.12.15
 # Image Processing
 pillow==11.0.0
 
-pandas
-numpy
- 
  # Django & APIs
  djangorestframework
  djangorestframework-simplejwt
