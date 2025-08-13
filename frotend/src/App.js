@@ -16,6 +16,7 @@ import Privacy from './components/Privacy';
 import Terms from './components/Terms';
 import Support from './components/Support';
 import Status from './components/Status';
+import Dashboard from './components/Dashboard';
 
 function App() {
   return (
@@ -41,6 +42,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/dashboard" element={<Dashboard />} />
         </Routes>
       </div>
     </Router>
