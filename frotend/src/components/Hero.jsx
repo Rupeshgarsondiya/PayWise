@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import heroImage from '../Photos/hero_two.webp';
+import heroImage from '../Photos/hero_two.jpg';
 import '../assets/css/Hero.css';
 
 const Hero = () => {
