@@ -30,3 +30,8 @@ pillow==11.0.0
 
 pandas
 numpy
+ 
+ # Django & APIs
+ djangorestframework
+ djangorestframework-simplejwt
+ django-cors-headers
