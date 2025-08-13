@@ -631,66 +631,58 @@ body.dark-mode .divider::before {
 
 
 /* Enhanced Header Styles */
-.header-visual {
-  position: relative;
-  margin-bottom: 24px;
-  height: 60px;
+.auth-header {
+  text-align: center;
+  margin-bottom: 32px;
+  animation: fadeInDown 0.8s ease-out;
+}
+
+.expense-icons.horizontal {
   display: flex;
   justify-content: center;
   align-items: center;
-}
-
-.expense-icons {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 120px;
+  gap: 20px;
+  width: 100%;
   height: 60px;
+  margin-bottom: 20px;
 }
 
-.icon-wrapper {
-  position: absolute;
-  padding: 8px;
+.expense-icons.horizontal .icon-wrapper {
+  position: relative;
+  padding: 12px;
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
   border-radius: 50%;
   border: 2px solid rgba(102, 126, 234, 0.2);
   color: #667eea;
-  animation: floatIcon 3s ease-in-out infinite;
   transition: all 0.3s ease;
+  animation: floatIcon 3s ease-in-out infinite;
+  /* Remove all absolute positioning */
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
 }
 
-.icon-wrapper:hover {
+.expense-icons.horizontal .icon-wrapper:hover {
   transform: scale(1.1) translateY(-2px);
   box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
 }
 
-.icon-1 {
-  top: 5px;
-  left: 10px;
+/* Individual animation delays for each icon */
+.expense-icons.horizontal .icon-wrapper:nth-child(1) {
   animation-delay: 0s;
 }
 
-.icon-2 {
-  top: -5px;
-  right: 10px;
-  animation-delay: 0.5s;
+.expense-icons.horizontal .icon-wrapper:nth-child(2) {
+  animation-delay: 0.3s;
 }
 
-.icon-3 {
-  bottom: 5px;
-  left: 20px;
-  animation-delay: 1s;
+.expense-icons.horizontal .icon-wrapper:nth-child(3) {
+  animation-delay: 0.6s;
 }
 
-.icon-4 {
-  bottom: -5px;
-  right: 20px;
-  animation-delay: 1.5s;
-}
-
-.header-content {
-  text-align: center;
+.expense-icons.horizontal .icon-wrapper:nth-child(4) {
+  animation-delay: 0.9s;
 }
 
 .brand-badge {
@@ -705,7 +697,7 @@ body.dark-mode .divider::before {
   font-size: 0.9rem;
   margin-bottom: 20px;
   box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-  animation: slideInDown 0.8s ease-out;
+  animation: slideInDown 0.8s ease-out, pulse 2s ease-in-out infinite 2s;
 }
 
 .brand-icon {
@@ -772,12 +764,6 @@ body.dark-mode .divider::before {
 }
 
 /* Dark mode styles for enhanced header */
-body.dark-mode .icon-wrapper {
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
-  border-color: rgba(102, 126, 234, 0.3);
-  color: #a5b4fc;
-}
-
 body.dark-mode .feature-item {
   background: rgba(102, 126, 234, 0.1);
   border-color: rgba(102, 126, 234, 0.2);
@@ -810,8 +796,37 @@ body.dark-mode .feature-item:hover {
   }
 }
 
-.brand-badge {
-  animation: slideInDown 0.8s ease-out, pulse 2s ease-in-out infinite 2s;
+@keyframes slideInDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* Mobile responsiveness for enhanced header */
@@ -829,13 +844,12 @@ body.dark-mode .feature-item:hover {
     padding: 4px 8px;
   }
   
-  .expense-icons {
-    width: 100px;
-    height: 50px;
+  .expense-icons.horizontal {
+    gap: 15px;
   }
   
-  .icon-wrapper {
-    padding: 6px;
+  .expense-icons.horizontal .icon-wrapper {
+    padding: 10px;
   }
 }
 
@@ -911,7 +925,6 @@ body.dark-mode .feature-item:hover {
     padding: 10px;
   }
 }
-
 
 
 /* Clean Horizontal Icons Layout */
