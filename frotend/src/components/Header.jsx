@@ -23,8 +23,8 @@ const Header = () => {
     <header className="header">
       <div className="header-container">
         <div className="logo">
-          <img src={logo} alt="Paywise Logo" />
-          <span>Paywise</span>
+          <img src={logo} alt="PayWise Logo" />
+          <span>PayWise</span>
         </div>
         
         <nav className={`nav ${isMenuOpen ? 'nav-open' : ''}`}>
