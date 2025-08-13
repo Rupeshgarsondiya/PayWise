@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import newExpenseImage from '../Photos/new-expense.webp';
-import debtImage from '../Photos/debt.webp';
+import debtImage from '../Photos/debt.jpg';
 import graphImage from '../Photos/graph.webp';
 import '../assets/css/Features.css';
 
