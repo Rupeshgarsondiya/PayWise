@@ -17,6 +17,7 @@ import Terms from './components/Terms';
 import Support from './components/Support';
 import Status from './components/Status';
 import Dashboard from './components/Dashboard';
+import Expenses from './components/Expenses';
 
 function App() {
   return (
@@ -43,6 +44,7 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/expenses" element={<Expenses />} />
         </Routes>
       </div>
     </Router>
