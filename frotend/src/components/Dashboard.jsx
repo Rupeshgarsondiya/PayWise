@@ -3,12 +3,56 @@ import { useNavigate } from 'react-router-dom';
 import logo from '../Photos/logo.png';
 import '../assets/css/Dashboard.css';
 
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
+
+async function authFetch(url, options = {}) {
+  const accessToken = localStorage.getItem('access_token');
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {}),
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+  };
+
+  const doFetch = async () => fetch(url, { ...options, headers });
+
+  let response = await doFetch();
+
+  if (response.status === 401) {
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) return response;
+
+    const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh: refreshToken }),
+    });
+
+    if (refreshRes.ok) {
+      const data = await refreshRes.json();
+      const newAccess = data.access;
+      if (newAccess) {
+        localStorage.setItem('access_token', newAccess);
+        const retryHeaders = {
+          ...headers,
+          Authorization: `Bearer ${newAccess}`,
+        };
+        response = await fetch(url, { ...options, headers: retryHeaders });
+      }
+    } else {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
+    }
+  }
+
+  return response;
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [expenses, setExpenses] = useState([]);
   const [groups, setGroups] = useState([]);
-  const [balance, setBalance] = useState(0);
+  const [summary, setSummary] = useState({ total_expenses: 0, owed_amount: 0 });
 
   // Get user data from localStorage
   useEffect(() => {
@@ -18,70 +62,35 @@ const Dashboard = () => {
     }
   }, []);
 
-  // Mock data for demonstration
+  // Load live summary and groups
   useEffect(() => {
-    setExpenses([
-      {
-        id: 1,
-        description: 'Dinner at Restaurant',
-        amount: 2500,
-        paidBy: 'You',
-        date: '2025-08-13',
-        category: 'Food',
-        group: 'Friends Trip'
-      },
-      {
-        id: 2,
-        description: 'Movie Tickets',
-        amount: 800,
-        paidBy: 'Rahul',
-        date: '2025-08-12',
-        category: 'Entertainment',
-        group: 'Weekend Fun'
-      },
-      {
-        id: 3,
-        description: 'Grocery Shopping',
-        amount: 1200,
-        paidBy: 'You',
-        date: '2025-08-11',
-        category: 'Food',
-        group: 'Roommates'
-      }
-    ]);
+    const loadData = async () => {
+      try {
+        const [summaryRes, groupsRes] = await Promise.all([
+          authFetch(`${API_BASE_URL}/expenses/expenses/summary/`),
+          authFetch(`${API_BASE_URL}/expenses/groups/`),
+        ]);
 
-    setGroups([
-      {
-        id: 1,
-        name: 'Friends Trip',
-        members: ['You', 'Rahul', 'Priya', 'Amit'],
-        totalExpenses: 4500,
-        yourShare: 1125,
-        youOwe: 0,
-        owedToYou: 375
-      },
-      {
-        id: 2,
-        name: 'Weekend Fun',
-        members: ['You', 'Rahul', 'Neha'],
-        totalExpenses: 1200,
-        yourShare: 400,
-        youOwe: 0,
-        owedToYou: 400
-      },
-      {
-        id: 3,
-        name: 'Roommates',
-        members: ['You', 'Priya', 'Amit'],
-        totalExpenses: 3600,
-        yourShare: 1200,
-        youOwe: 0,
-        owedToYou: 0
-      }
-    ]);
+        if (summaryRes.ok) {
+          const s = await summaryRes.json();
+          setSummary({
+            total_expenses: s.total_expenses || 0,
+            owed_amount: s.owed_amount || 0,
+          });
+        }
 
-    setBalance(775); // Net positive balance
-  }, []);
+        if (groupsRes.ok) {
+          const g = await groupsRes.json();
+          setGroups(g || []);
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to load dashboard data', e);
+      }
+    };
+
+    if (user) loadData();
+  }, [user]);
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
@@ -126,7 +135,7 @@ const Dashboard = () => {
             <span className="nav-icon">📊</span>
             <span className="nav-text">Overview</span>
           </button>
-          <button className="nav-item">
+          <button className="nav-item" onClick={() => navigate('/expenses')}>
             <span className="nav-icon">💰</span>
             <span className="nav-text">Expenses</span>
           </button>
@@ -180,7 +189,7 @@ const Dashboard = () => {
                 <div className="card-icon">💰</div>
                 <div className="card-content">
                   <h3>You're owed</h3>
-                  <p className="amount">{formatCurrency(balance)}</p>
+                  <p className="amount">{formatCurrency(Number(summary.owed_amount || 0))}</p>
                 </div>
               </div>
               
@@ -188,7 +197,7 @@ const Dashboard = () => {
                 <div className="card-icon">📊</div>
                 <div className="card-content">
                   <h3>Total Expenses</h3>
-                  <p className="amount">{formatCurrency(expenses.reduce((sum, exp) => sum + exp.amount, 0))}</p>
+                  <p className="amount">{formatCurrency(Number(summary.total_expenses || 0))}</p>
                 </div>
               </div>
               
