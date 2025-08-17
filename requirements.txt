@@ -10,9 +10,8 @@ scikit-learn==1.7.1
 scikit-image==0.25.2
 
 # Computer Vision & OCR
-opencv-python==4.12.0.88
 easyocr==1.7.2
-pytesseract==0.3.13
+# pytesseract==0.3.13
 
 # Data Processing
 pandas==2.3.1
@@ -32,3 +31,10 @@ pillow==11.0.0
  djangorestframework
  djangorestframework-simplejwt
  django-cors-headers
+
+opencv-python==4.8.1.78
+pytesseract==0.3.10
+# transformers==4.35.2
+# torch==2.1.1
+# torchvision==0.16.1
+# Pillow==10.1.0

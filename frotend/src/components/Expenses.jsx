@@ -1,75 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import logo from '../Photos/logo.png';
 import '../assets/css/Expenses.css';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
-
-async function authFetch(url, options = {}) {
-  const accessToken = localStorage.getItem('access_token');
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-  };
-
-  const doFetch = async () => fetch(url, { ...options, headers });
-
-  let response = await doFetch();
-
-  if (response.status === 401) {
-    // Try refresh
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (!refreshToken) return response;
-
-    const refreshRes = await fetch(`${API_BASE_URL}/auth/refresh/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh: refreshToken }),
-    });
-
-    if (refreshRes.ok) {
-      const data = await refreshRes.json();
-      const newAccess = data.access;
-      if (newAccess) {
-        localStorage.setItem('access_token', newAccess);
-        // Retry original request with new token
-        const retryHeaders = {
-          ...headers,
-          Authorization: `Bearer ${newAccess}`,
-        };
-        response = await fetch(url, { ...options, headers: retryHeaders });
-      }
-    } else {
-      // Refresh failed -> force logout
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user');
-    }
-  }
-
-  return response;
-}
+const API_BASE_URL = 'http://127.0.0.1:8000/api/expenses';
 
 const Expenses = () => {
-  const navigate = useNavigate();
-  const [user, setUser] = useState(null);
-  const [formData, setFormData] = useState({
-    description: '',
-    amount: '',
-    date: new Date().toISOString().split('T')[0],
-    category: '',
-    group: '',
-    paidBy: 'me',
-    splitWith: []
-  });
-  const [loading, setLoading] = useState(false);
-  const [aiCategory, setAiCategory] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [expenses, setExpenses] = useState([]);
-  const [groups, setGroups] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [showForm, setShowForm] = useState(false);
+  const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [summary, setSummary] = useState({
     total_expenses: 0,
@@ -78,129 +18,212 @@ const Expenses = () => {
     owed_amount: 0
   });
 
-  useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      setUser(JSON.parse(userData));
-    }
-  }, []);
+  const [formData, setFormData] = useState({
+    description: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0],
+    category_id: '',
+    group_id: '',
+    payment_method: '',
+    notes: '',
+    receipt_image: null
+  });
 
   useEffect(() => {
-    if (user) {
-      fetchCategories();
-      fetchGroups();
-      fetchExpenses();
-      fetchSummary();
+    fetchExpenses();
+    fetchCategories();
+    fetchGroups();
+    fetchSummary();
+  }, []);
+
+  const fetchExpenses = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE_URL}/expenses/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setExpenses(data.results || data);
+      }
+    } catch (error) {
+      console.error('Error fetching expenses:', error);
     }
-  }, [user]);
+  };
 
   const fetchCategories = async () => {
     try {
-      const response = await authFetch(`${API_BASE_URL}/expenses/categories/`);
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE_URL}/categories/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
-        setCategories(data);
+        setCategories(data.results || data);
       }
     } catch (error) {
-      console.error('Failed to fetch categories:', error);
+      console.error('Error fetching categories:', error);
     }
   };
 
   const fetchGroups = async () => {
     try {
-      const response = await authFetch(`${API_BASE_URL}/expenses/groups/`);
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE_URL}/groups/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
-        setGroups(data);
+        setGroups(data.results || data);
       }
     } catch (error) {
-      console.error('Failed to fetch groups:', error);
-    }
-  };
-
-  const fetchExpenses = async () => {
-    try {
-      const response = await authFetch(`${API_BASE_URL}/expenses/expenses/`);
-      if (response.ok) {
-        const data = await response.json();
-        setExpenses(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch expenses:', error);
+      console.error('Error fetching groups:', error);
     }
   };
 
   const fetchSummary = async () => {
     try {
-      const response = await authFetch(`${API_BASE_URL}/expenses/expenses/summary/`);
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`${API_BASE_URL}/expenses/summary/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (response.ok) {
         const data = await response.json();
         setSummary(data);
       }
     } catch (error) {
-      console.error('Failed to fetch summary:', error);
+      console.error('Error fetching summary:', error);
     }
   };
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-
-    if (name === 'description' && value.length > 3) {
-      detectCategory(value);
+  // ✅ FIXED: Enhanced input change handler with proper file validation
+  const handleInputChange = (e) => {
+    const { name, value, files } = e.target;
+    
+    if (name === 'receipt_image') {
+      const selectedFile = files?.[0];
+      
+      if (selectedFile) {
+        // ✅ FIX: Check if file.type exists before using startsWith
+        if (!selectedFile.type) {
+          alert('Invalid file format. Please select a valid image file.');
+          e.target.value = ''; // Clear the input
+          return;
+        }
+        
+        // ✅ FIX: Now safely check file type
+        if (!selectedFile.type.startsWith('image/')) {
+          alert('Please select a valid image file (JPG, PNG, WEBP, etc.)');
+          e.target.value = ''; // Clear the input
+          return;
+        }
+        
+        // ✅ FIX: Check file size
+        if (selectedFile.size > 10 * 1024 * 1024) {
+          alert('File size too large. Please select an image under 10MB.');
+          e.target.value = ''; // Clear the input
+          return;
+        }
+        
+        setFormData(prev => ({ ...prev, [name]: selectedFile }));
+        
+        // Trigger automatic OCR scan
+        handleAutomaticOCRScan(selectedFile);
+      } else {
+        setFormData(prev => ({ ...prev, [name]: null }));
+      }
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
-  const detectCategory = async (description) => {
-    setAiLoading(true);
+  // ✅ COMPLETELY FIXED: OCR scanning function with comprehensive error handling
+  const handleAutomaticOCRScan = async (file) => {
+    console.log('File received:', file);
+    
+    // ✅ FIX: Enhanced validation with null/undefined checks
+    if (!file) {
+      alert('Please select an image file first');
+      return;
+    }
+
+    // ✅ FIX: Check if file.type exists before using startsWith
+    if (!file.type) {
+      alert('Invalid file format. Please select a valid image file.');
+      return;
+    }
+
+    // ✅ FIX: Now safely check file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file (JPG, PNG, etc.)');
+      return;
+    }
+
+    // ✅ FIX: Validate file size with proper checks
+    if (file.size && file.size > 10 * 1024 * 1024) {
+      alert('File size too large. Please select an image under 10MB.');
+      return;
+    }
+
+    setOcrLoading(true);
+    
     try {
-      const response = await authFetch(`${API_BASE_URL}/expenses/expenses/detect_category/`, {
+      const formDataOCR = new FormData();
+      formDataOCR.append('receipt_image', file, file.name);
+
+      // Debug: Log FormData contents
+      console.log('FormData contents:');
+      for (let [key, value] of formDataOCR.entries()) {
+        console.log(key, value);
+      }
+
+      const token = localStorage.getItem('access_token');
+      console.log('Making OCR request to:', `${API_BASE_URL}/expenses/scan_receipt/`);
+      
+      const response = await fetch(`${API_BASE_URL}/expenses/scan_receipt/`, {
         method: 'POST',
-        body: JSON.stringify({
-          description: description,
-          amount: parseFloat(formData.amount) || 0
-        }),
+        headers: {
+          'Authorization': `Bearer ${token}`
+          // Don't set Content-Type for FormData - let browser set it
+        },
+        body: formDataOCR
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setAiCategory(data.category);
-        setFormData(prev => ({ ...prev, category: data.category }));
+      console.log('Response status:', response.status);
+      
+      // ✅ FIX: Better error handling for HTTP errors
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      console.log('Response data:', result);
+
+      if (result.success) {
+        alert(`✅ SUCCESS! ${result.message}`);
+        // Refresh the expenses list and summary to show the new expense
+        await fetchExpenses();
+        await fetchSummary();
+        console.log('Created expense:', result.expense_created);
+        console.log('OCR data:', result.ocr_data);
       } else {
-        const fallbackCategory = detectCategoryFallback(description);
-        setAiCategory(fallbackCategory);
-        setFormData(prev => ({ ...prev, category: fallbackCategory }));
+        alert(`❌ OCR Failed: ${result.message || result.error || 'Unknown error'}`);
+        console.error('OCR Error Details:', result);
       }
     } catch (error) {
-      console.error('AI category detection failed:', error);
-      const fallbackCategory = detectCategoryFallback(description);
-      setAiCategory(fallbackCategory);
-      setFormData(prev => ({ ...prev, category: fallbackCategory }));
+      console.error('OCR Request Error:', error);
+      alert(`🚫 Network error: ${error.message}. Please check your connection and try again.`);
     } finally {
-      setAiLoading(false);
+      setOcrLoading(false);
     }
-  };
-
-  const detectCategoryFallback = (description) => {
-    const keywords = description.toLowerCase();
-    let detectedCategory = 'Other';
-    if (keywords.includes('food') || keywords.includes('restaurant') || keywords.includes('dinner') || keywords.includes('lunch') || keywords.includes('breakfast') || keywords.includes('grocery')) {
-      detectedCategory = 'Food';
-    } else if (keywords.includes('movie') || keywords.includes('cinema') || keywords.includes('game') || keywords.includes('concert') || keywords.includes('party')) {
-      detectedCategory = 'Entertainment';
-    } else if (keywords.includes('uber') || keywords.includes('taxi') || keywords.includes('fuel') || keywords.includes('parking') || keywords.includes('bus')) {
-      detectedCategory = 'Transport';
-    } else if (keywords.includes('shirt') || keywords.includes('shoes') || keywords.includes('dress') || keywords.includes('shopping') || keywords.includes('clothes')) {
-      detectedCategory = 'Shopping';
-    } else if (keywords.includes('electricity') || keywords.includes('water') || keywords.includes('internet') || keywords.includes('rent') || keywords.includes('bill')) {
-      detectedCategory = 'Bills';
-    } else if (keywords.includes('medicine') || keywords.includes('doctor') || keywords.includes('hospital') || keywords.includes('pharmacy')) {
-      detectedCategory = 'Healthcare';
-    }
-    return detectedCategory;
   };
 
   const handleSubmit = async (e) => {
@@ -208,403 +231,371 @@ const Expenses = () => {
     setLoading(true);
 
     try {
-      const payload = {
-        description: formData.description,
-        amount: parseFloat(formData.amount),
-        date: formData.date,
-        category_id: categories.find(c => c.name === formData.category)?.id,
-        group_id: groups.find(g => g.name === formData.group)?.id,
-        // omit paid_by_id so backend defaults to current user
-        notes: `AI detected category: ${aiCategory}`
-      };
-
-      let response;
-      if (editingExpense) {
-        // Try PATCH first
-        response = await authFetch(`${API_BASE_URL}/expenses/expenses/${editingExpense.id}/`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        });
-        // If Not Found (e.g., stale id or router quirk), try PUT as fallback
-        if (response.status === 404) {
-          response = await authFetch(`${API_BASE_URL}/expenses/expenses/${editingExpense.id}/`, {
-            method: 'PUT',
-            body: JSON.stringify(payload),
-          });
+      const submitFormData = new FormData();
+      
+      // Add all form fields
+      Object.keys(formData).forEach(key => {
+        if (formData[key] !== null && formData[key] !== '') {
+          submitFormData.append(key, formData[key]);
         }
-      } else {
-        response = await authFetch(`${API_BASE_URL}/expenses/expenses/`, {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-      }
+      });
+
+      const token = localStorage.getItem('access_token');
+      const url = editingExpense 
+        ? `${API_BASE_URL}/expenses/${editingExpense.id}/` 
+        : `${API_BASE_URL}/expenses/`;
+      const method = editingExpense ? 'PATCH' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: submitFormData
+      });
 
       if (response.ok) {
-        const saved = await response.json();
-        if (editingExpense) {
-          setExpenses(prev => prev.map(exp => exp.id === editingExpense.id ? saved : exp));
-        } else {
-          setExpenses(prev => [saved, ...prev]);
-        }
-        setFormData({
-          description: '',
-          amount: '',
-          date: new Date().toISOString().split('T')[0],
-          category: '',
-          group: '',
-          paidBy: 'me',
-          splitWith: []
-        });
-        setAiCategory('');
-        setEditingExpense(null);
-        setShowForm(false);
-        fetchSummary();
         alert(editingExpense ? 'Expense updated successfully!' : 'Expense added successfully!');
-      } else if (response.status === 401) {
-        alert('Your session has expired. Please login again.');
-        navigate('/login');
+        setShowExpenseForm(false);
+        setEditingExpense(null);
+        resetForm();
+        fetchExpenses();
+        fetchSummary();
       } else {
         const errorData = await response.json();
-        alert(`${editingExpense ? 'Failed to update' : 'Failed to add'} expense: ${JSON.stringify(errorData)}`);
+        alert('Error: ' + JSON.stringify(errorData));
       }
     } catch (error) {
-      console.error('Failed to save expense:', error);
-      alert('Failed to save expense. Please try again.');
+      console.error('Error submitting expense:', error);
+      alert('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const getCategoryIcon = (category) => {
-    const categoryObj = categories.find(c => c.name === category);
-    return categoryObj?.icon || '📝';
+  // Helper functions
+  const handleEdit = (expense) => {
+    setEditingExpense(expense);
+    setFormData({
+      description: expense.description,
+      amount: expense.amount,
+      date: expense.date,
+      category_id: expense.category?.id || '',
+      group_id: expense.group?.id || '',
+      payment_method: expense.payment_method || '',
+      notes: expense.notes || '',
+      receipt_image: null
+    });
+    setShowExpenseForm(true);
+  };
+
+  const handleDelete = async (expenseId) => {
+    if (window.confirm('Are you sure you want to delete this expense?')) {
+      try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${API_BASE_URL}/expenses/${expenseId}/`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          alert('Expense deleted successfully!');
+          fetchExpenses();
+          fetchSummary();
+        } else {
+          alert('Error deleting expense');
+        }
+      } catch (error) {
+        console.error('Error deleting expense:', error);
+        alert('Something went wrong. Please try again.');
+      }
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      description: '',
+      amount: '',
+      date: new Date().toISOString().split('T')[0],
+      category_id: '',
+      group_id: '',
+      payment_method: '',
+      notes: '',
+      receipt_image: null
+    });
   };
 
   const formatCurrency = (amount) => {
-    return `₹${parseFloat(amount).toLocaleString('en-IN')}`;
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR'
+    }).format(amount);
   };
-
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user');
-    navigate('/');
-  };
-
-  if (!user) {
-    return <div>Loading...</div>;
-  }
 
   return (
-    <div className="expenses-page">
-      <aside className="expenses-sidebar">
-        <div className="sidebar-header">
-          <div className="logo">
-            <img src={logo} alt="PayWise Logo" />
-            <span className="logo-text">PayWise</span>
+    <div className="expenses-container">
+      {/* Navigation */}
+      <nav className="expense-nav">
+        <h1>💰 PayWise - Expenses</h1>
+        <button 
+          onClick={() => setShowExpenseForm(true)}
+          className="add-expense-btn"
+        >
+          ➕ Add New Expense
+        </button>
+      </nav>
+
+      {/* Summary Cards */}
+      <div className="summary-section">
+        <div className="summary-card">
+          <h3>💰 Total Expenses</h3>
+          <p>{formatCurrency(summary.total_expenses)}</p>
+        </div>
+        <div className="summary-card">
+          <h3>📅 This Month</h3>
+          <p>{formatCurrency(summary.month_expenses)}</p>
+        </div>
+        <div className="summary-card">
+          <h3>📝 Total Count</h3>
+          <p>{summary.total_count}</p>
+        </div>
+        <div className="summary-card">
+          <h3>🤝 Amount Owed</h3>
+          <p>{formatCurrency(summary.owed_amount)}</p>
+        </div>
+      </div>
+
+      {/* Expense Form Modal */}
+      {showExpenseForm && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2>{editingExpense ? '✏️ Edit Expense' : '➕ Add New Expense'}</h2>
+              <button 
+                onClick={() => {
+                  setShowExpenseForm(false);
+                  setEditingExpense(null);
+                  resetForm();
+                }}
+                className="close-btn"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="expense-form">
+              <div className="form-group">
+                <label htmlFor="description">📝 Description *</label>
+                <input
+                  type="text"
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  placeholder="Enter expense description"
+                  required
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="amount">💰 Amount *</label>
+                  <input
+                    type="number"
+                    id="amount"
+                    name="amount"
+                    value={formData.amount}
+                    onChange={handleInputChange}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="date">📅 Date *</label>
+                  <input
+                    type="date"
+                    id="date"
+                    name="date"
+                    value={formData.date}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="category_id">🏷️ Category</label>
+                  <select
+                    id="category_id"
+                    name="category_id"
+                    value={formData.category_id}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Select Category</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.id}>
+                        {category.icon} {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="group_id">👥 Group</label>
+                  <select
+                    id="group_id"
+                    name="group_id"
+                    value={formData.group_id}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Personal (No Group)</option>
+                    {groups.map(group => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="payment_method">💳 Payment Method</label>
+                <input
+                  type="text"
+                  id="payment_method"
+                  name="payment_method"
+                  value={formData.payment_method}
+                  onChange={handleInputChange}
+                  placeholder="e.g., Cash, Credit Card, UPI"
+                />
+              </div>
+
+              {/* ✅ FIXED: Receipt upload with proper validation */}
+              <div className="form-group">
+                <label htmlFor="receipt_image">📷 Receipt Image (Auto OCR)</label>
+                <input
+                  type="file"
+                  id="receipt_image"
+                  name="receipt_image"
+                  onChange={handleInputChange}
+                  accept="image/*"
+                  className="file-input"
+                />
+                <p className="file-help">
+                  📸 Upload receipt for automatic data extraction
+                </p>
+                {ocrLoading && (
+                  <div className="ocr-loading">
+                    ⏳ Processing receipt with AI OCR...
+                  </div>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="notes">📋 Notes</label>
+                <textarea
+                  id="notes"
+                  name="notes"
+                  value={formData.notes}
+                  onChange={handleInputChange}
+                  placeholder="Additional notes about this expense"
+                  rows="3"
+                />
+              </div>
+
+              <div className="form-actions">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowExpenseForm(false);
+                    setEditingExpense(null);
+                    resetForm();
+                  }}
+                  className="cancel-btn"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="submit-btn"
+                >
+                  {loading ? '⏳ Processing...' : (editingExpense ? '💾 Update' : '➕ Add Expense')}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-        <nav className="sidebar-nav">
-          <button className="nav-item" onClick={() => navigate('/dashboard')}>
-            <span className="nav-icon">📊</span>
-            <span className="nav-text">Overview</span>
-          </button>
-          <button className="nav-item active">
-            <span className="nav-icon">💰</span>
-            <span className="nav-text">Expenses</span>
-          </button>
-          <button className="nav-item">
-            <span className="nav-icon">👥</span>
-            <span className="nav-text">Groups</span>
-          </button>
-          <button className="nav-item">
-            <span className="nav-icon">💳</span>
-            <span className="nav-text">Settlements</span>
-          </button>
-        </nav>
-        <div className="sidebar-footer">
-          <button className="nav-item" onClick={handleLogout}>
-            <span className="nav-icon">🚪</span>
-            <span className="nav-text">Logout</span>
-          </button>
-        </div>
-      </aside>
+      )}
 
-      <div className="expenses-main">
-        <header className="expenses-header">
-          <div className="header-content">
-            <h1>Expenses</h1>
+      {/* Expenses List */}
+      <div className="expenses-list">
+        <h2>📋 Recent Expenses</h2>
+        {expenses.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📝</div>
+            <h3>No expenses yet</h3>
+            <p>Add your first expense to get started!</p>
             <button 
-              className="btn btn-primary add-expense-btn"
-              onClick={() => {
-                setEditingExpense(null);
-                setFormData({
-                  description: '',
-                  amount: '',
-                  date: new Date().toISOString().split('T')[0],
-                  category: '',
-                  group: '',
-                  paidBy: 'me',
-                  splitWith: []
-                });
-                setAiCategory('');
-                setShowForm(true);
-              }}
+              onClick={() => setShowExpenseForm(true)}
+              className="add-first-expense-btn"
             >
-              <span className="btn-icon">+</span>
-              Add New Expense
+              ➕ Add First Expense
             </button>
           </div>
-          <div className="user-menu">
-            <div className="user-avatar">
-              <span>{user.first_name ? user.first_name.charAt(0) : user.email.charAt(0).toUpperCase()}</span>
-            </div>
-            <div className="user-info">
-              <span className="user-name">{user.first_name || 'User'}</span>
-              <span className="user-email">{user.email}</span>
-            </div>
-          </div>
-        </header>
-
-        <main className="expenses-content">
-          {showForm && (
-            <div className="expense-form-overlay">
-              <div className="expense-form-modal">
-                <div className="modal-header">
-                  <h2>{editingExpense ? 'Edit Expense' : 'Add New Expense'}</h2>
+        ) : (
+          <div className="expenses-grid">
+            {expenses.map(expense => (
+              <div key={expense.id} className="expense-card">
+                <div className="expense-header">
+                  <div className="expense-category">
+                    {expense.category?.icon || '📝'} {expense.category?.name || expense.ai_detected_category || 'Other'}
+                  </div>
+                  <div className="expense-amount">
+                    {formatCurrency(expense.amount)}
+                  </div>
+                </div>
+                
+                <div className="expense-content">
+                  <h3 className="expense-description">{expense.description}</h3>
+                  <div className="expense-meta">
+                    <span className="expense-date">📅 {expense.date}</span>
+                    {expense.group && (
+                      <span className="expense-group">👥 {expense.group.name}</span>
+                    )}
+                    {expense.payment_method && (
+                      <span className="expense-payment">💳 {expense.payment_method}</span>
+                    )}
+                  </div>
+                  {expense.notes && (
+                    <p className="expense-notes">{expense.notes}</p>
+                  )}
+                </div>
+                
+                <div className="expense-actions">
                   <button 
-                    className="close-btn"
-                    onClick={() => setShowForm(false)}
+                    onClick={() => handleEdit(expense)}
+                    className="edit-btn"
                   >
-                    ×
+                    ✏️ Edit
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(expense.id)}
+                    className="delete-btn"
+                  >
+                    🗑️ Delete
                   </button>
                 </div>
-
-                <form onSubmit={handleSubmit} className="expense-form">
-                  <div className="form-group">
-                    <label htmlFor="description">Description</label>
-                    <input
-                      type="text"
-                      id="description"
-                      name="description"
-                      value={formData.description}
-                      onChange={handleChange}
-                      placeholder="What did you spend on?"
-                      required
-                    />
-                    {aiLoading && (
-                      <div className="ai-loading">
-                        <div className="ai-spinner"></div>
-                        <span>AI is detecting category...</span>
-                      </div>
-                    )}
-                    {aiCategory && !aiLoading && (
-                      <div className="ai-detection">
-                        <span className="ai-icon">🤖</span>
-                        <span>AI detected: <strong>{aiCategory}</strong></span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="amount">Amount (₹)</label>
-                      <input
-                        type="number"
-                        id="amount"
-                        name="amount"
-                        value={formData.amount}
-                        onChange={handleChange}
-                        placeholder="0.00"
-                        step="0.01"
-                        min="0"
-                        required
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="date">Date</label>
-                      <input
-                        type="date"
-                        id="date"
-                        name="date"
-                        value={formData.date}
-                        onChange={handleChange}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="category">Category (AI Detected)</label>
-                      <input
-                        type="text"
-                        id="category"
-                        name="category"
-                        value={formData.category}
-                        onChange={handleChange}
-                        placeholder="Category will be auto-detected"
-                        readOnly
-                        className="readonly-input"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="group">Group (Optional)</label>
-                      <select
-                        id="group"
-                        name="group"
-                        value={formData.group}
-                        onChange={handleChange}
-                      >
-                        <option value="">No Group</option>
-                        {groups.map(group => (
-                          <option key={group.id} value={group.name}>{group.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="paidBy">Paid By</label>
-                    <select
-                      id="paidBy"
-                      name="paidBy"
-                      value={formData.paidBy}
-                      onChange={handleChange}
-                      required
-                    >
-                      <option value="me">You</option>
-                      {groups.find(g => g.name === formData.group)?.members.filter(m => m !== 'You').map(member => (
-                        <option key={member} value={member}>{member}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-actions">
-                    <button 
-                      type="button" 
-                      className="btn btn-outline"
-                      onClick={() => setShowForm(false)}
-                    >
-                      Cancel
-                    </button>
-                    <button 
-                      type="submit" 
-                      className="btn btn-primary"
-                      disabled={loading}
-                    >
-                      {loading ? 'Adding...' : 'Add Expense'}
-                    </button>
-                  </div>
-                </form>
               </div>
-            </div>
-          )}
-
-          <div className="expenses-summary">
-            <div className="summary-card total">
-              <div className="card-icon">💰</div>
-              <div className="card-content">
-                <h3>Total Expenses</h3>
-                <p className="amount">{formatCurrency(summary.total_expenses)}</p>
-              </div>
-            </div>
-            <div className="summary-card this-month">
-              <div className="card-icon">📅</div>
-              <div className="card-content">
-                <h3>This Month</h3>
-                <p className="amount">{formatCurrency(summary.month_expenses)}</p>
-              </div>
-            </div>
-            <div className="summary-card count">
-              <div className="card-icon">📝</div>
-              <div className="card-content">
-                <h3>Total Count</h3>
-                <p className="amount">{summary.total_count}</p>
-              </div>
-            </div>
-            <div className="summary-card owed">
-              <div className="card-icon">💳</div>
-              <div className="card-content">
-                <h3>You're Owed</h3>
-                <p className="amount">{formatCurrency(summary.owed_amount)}</p>
-              </div>
-            </div>
+            ))}
           </div>
-
-          <div className="expenses-list">
-            <div className="list-header">
-              <h2>Recent Expenses</h2>
-              <div className="list-filters">
-                <select className="filter-select">
-                  <option value="">All Categories</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.name}>{category.name}</option>
-                  ))}
-                </select>
-                <select className="filter-select">
-                  <option value="">All Groups</option>
-                  {groups.map(group => (
-                    <option key={group.id} value={group.name}>{group.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="expenses-grid">
-              {expenses.map(expense => (
-                <div key={expense.id} className="expense-card">
-                  <div className="expense-header">
-                    <div className="category-icon">
-                      {getCategoryIcon(expense.category?.name || expense.ai_detected_category)}
-                    </div>
-                    <div className="expense-amount">
-                      {formatCurrency(expense.amount)}
-                    </div>
-                  </div>
-                  <div className="expense-details">
-                    <h3 className="expense-description">{expense.description}</h3>
-                    <p className="expense-meta">
-                      <span className="expense-date">{new Date(expense.date).toLocaleDateString()}</span>
-                      <span className="expense-category">
-                        {expense.category?.name || expense.ai_detected_category || 'Other'}
-                      </span>
-                    </p>
-                    {expense.group && (
-                      <p className="expense-group">Group: {expense.group.name}</p>
-                    )}
-                    <p className="expense-paid-by">Paid by: {expense.paid_by?.first_name || expense.paid_by?.email || 'You'}</p>
-                    {expense.ai_detected_category && (
-                      <p className="ai-indicator">🤖 AI Detected</p>
-                    )}
-                    <div className="expense-actions">
-                      <button
-                        type="button"
-                        className="btn btn-outline"
-                        onClick={() => {
-                          setEditingExpense(expense);
-                          setFormData({
-                            description: expense.description || '',
-                            amount: expense.amount != null ? String(expense.amount) : '',
-                            date: expense.date,
-                            category: expense.category?.name || expense.ai_detected_category || '',
-                            group: expense.group?.name || '',
-                            paidBy: 'me',
-                            splitWith: []
-                          });
-                          setAiCategory(expense.ai_detected_category || expense.category?.name || '');
-                          setShowForm(true);
-                        }}
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </main>
+        )}
       </div>
     </div>
   );

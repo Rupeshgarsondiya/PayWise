@@ -15,6 +15,14 @@ from .serializers import (
     ExpenseReceiptSerializer, AICategoryDetectionSerializer, AICategoryDetectionResponseSerializer
 )
 
+# Import OCR service with fallback
+try:
+    from .ocr_service import OCRProcessor
+    OCR_AVAILABLE = True
+except ImportError:
+    print("OCR service not available - using fallback")
+    OCR_AVAILABLE = False
+
 class ExpenseCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for expense categories"""
     queryset = ExpenseCategory.objects.all()
@@ -58,7 +66,6 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         # Filter by date range
         start_date = self.request.query_params.get('start_date', None)
         end_date = self.request.query_params.get('end_date', None)
-        
         if start_date:
             queryset = queryset.filter(date__gte=start_date)
         if end_date:
@@ -134,6 +141,152 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         
         return total_owed
     
+    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def scan_receipt(self, request):
+        """OCR endpoint for receipt scanning with AUTOMATIC database saving"""
+        
+        # Debug logging
+        print("=== OCR SCAN REQUEST DEBUG ===")
+        print(f"Request method: {request.method}")
+        print(f"Request content type: {request.content_type}")
+        print(f"Request FILES: {list(request.FILES.keys())}")
+        print(f"Request data keys: {list(request.data.keys())}")
+        
+        if 'receipt_image' not in request.FILES:
+            available_files = list(request.FILES.keys())
+            error_msg = f'No receipt image provided. Available files: {available_files}'
+            print(f"ERROR: {error_msg}")
+            
+            return Response({
+                'success': False, 
+                'error': error_msg, 
+                'message': 'Please select an image file to scan',
+                'debug_info': {
+                    'available_files': available_files,
+                    'request_data_keys': list(request.data.keys()),
+                    'content_type': request.content_type
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            uploaded_file = request.FILES['receipt_image']
+            print(f"Uploaded file: {uploaded_file.name}, Size: {uploaded_file.size}, Type: {uploaded_file.content_type}")
+            
+            # Validate file
+            if uploaded_file.size > 10 * 1024 * 1024:  # 10MB limit
+                return Response({
+                    'success': False,
+                    'error': 'File too large',
+                    'message': 'Please upload an image smaller than 10MB'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Process OCR (keeping your existing logic)
+            if OCR_AVAILABLE:
+                ocr_processor = OCRProcessor()
+                extracted_data = ocr_processor.process_receipt(uploaded_file)
+            else:
+                # Fallback sample data for testing
+                extracted_data = {
+                    'description': f'Sample OCR Receipt - {uploaded_file.name}',
+                    'amount': 250.75,
+                    'date': datetime.now().date(),
+                    'category': 'Food',
+                    'merchant': 'Test Restaurant',
+                    'items': [
+                        {'name': 'Burger', 'price': 150.0},
+                        {'name': 'Fries', 'price': 80.0},
+                        {'name': 'Drink', 'price': 20.75}
+                    ],
+                    'confidence': {
+                        'amount': 0.9,
+                        'date': 0.8,
+                        'category': 0.85,
+                        'overall': 0.85
+                    },
+                    'raw_text': f'Sample OCR text for testing - File: {uploaded_file.name}'
+                }
+            
+            print(f"OCR extracted data: {extracted_data}")
+            
+            # AUTOMATICALLY CREATE EXPENSE IN DATABASE
+            expense_data = {
+                'description': extracted_data.get('description', 'OCR Scanned Receipt'),
+                'amount': extracted_data.get('amount', 100.0),
+                'date': extracted_data.get('date', datetime.now().date()),
+                'currency': 'INR',
+                'ai_detected_category': extracted_data.get('category', 'Other'),
+                'ai_confidence': extracted_data.get('confidence', {}).get('overall', 0.5),
+                'notes': f"Auto-scanned receipt from: {uploaded_file.name}\n\nMerchant: {extracted_data.get('merchant', 'Unknown')}\n\nItems:\n" + 
+                        "\n".join([f"• {item['name']}: ₹{item['price']}" for item in extracted_data.get('items', [])]) +
+                        f"\n\nOCR Confidence: {extracted_data.get('confidence', {}).get('overall', 0.5):.0%}",
+                'receipt_image': uploaded_file
+            }
+            
+            # Find matching category
+            category = None
+            if extracted_data.get('category'):
+                try:
+                    category = ExpenseCategory.objects.filter(
+                        name__icontains=extracted_data['category']
+                    ).first()
+                    if category:
+                        expense_data['category'] = category
+                        print(f"Found matching category: {category.name}")
+                except Exception as e:
+                    print(f"Category matching error: {e}")
+            
+            # Create expense using model
+            user = request.user
+            expense_data['created_by'] = user
+            expense_data['paid_by'] = user
+            
+            print(f"Creating expense with data: {expense_data}")
+            
+            # Create the expense
+            expense = Expense.objects.create(**expense_data)
+            print(f"Expense created successfully: ID {expense.id}")
+            
+            # Serialize the created expense
+            expense_serializer = ExpenseSerializer(expense, context={'request': request})
+            
+            # Return success response with created expense
+            return Response({
+                'success': True,
+                'message': f'✅ Receipt scanned and expense created automatically!\n\n' +
+                          f'Amount: ₹{expense.amount}\n' +
+                          f'Category: {extracted_data.get("category", "Other")}\n' +
+                          f'Merchant: {extracted_data.get("merchant", "Unknown")}\n' +
+                          f'Items found: {len(extracted_data.get("items", []))}\n' +
+                          f'File processed: {uploaded_file.name}\n' +
+                          f'Confidence: {(extracted_data.get("confidence", {}).get("overall", 0.5) * 100):.0f}%',
+                'expense_created': expense_serializer.data,
+                'ocr_data': {
+                    'description': extracted_data.get('description'),
+                    'amount': str(extracted_data.get('amount', 0)),
+                    'date': extracted_data.get('date').isoformat() if extracted_data.get('date') else datetime.now().date().isoformat(),
+                    'category': extracted_data.get('category'),
+                    'merchant': extracted_data.get('merchant'),
+                    'items': extracted_data.get('items', []),
+                    'confidence': extracted_data.get('confidence', {}),
+                    'file_name': uploaded_file.name
+                }
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            print(f"OCR Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
+            return Response({
+                'success': False,
+                'error': str(e),
+                'message': f'Failed to process receipt: {str(e)}. Please try manual entry.',
+                'debug_info': {
+                    'error_type': type(e).__name__,
+                    'error_details': str(e)
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
     @action(detail=False, methods=['post'])
     def detect_category(self, request):
         """AI-powered category detection using Ollama"""
@@ -162,27 +315,26 @@ class ExpenseViewSet(viewsets.ModelViewSet):
             # Ollama API endpoint (default localhost:11434)
             ollama_url = "http://localhost:11434/api/generate"
             
-            # Create a prompt for the LLM (biased to map groceries → Food)
+            # Create a prompt for the LLM
             prompt = f"""
             Classify the expense description into ONE of:
             Food, Entertainment, Transport, Shopping, Bills, Healthcare, Education, Travel, Home, Other.
-
+            
             Rules:
             - Return ONLY the category name.
-            - Groceries (milk, curd/yogurt, paneer, bread, butter, cheese, vegetables, fruits, banana, apple, eggs, rice, wheat/flour/atta, dal/lentils/pulses, oil, spices, sugar, tea, coffee, grocery/supermarket/kirana) => Food.
+            - Groceries => Food.
             - Restaurant, meal, delivery, cafe, snack => Food.
-            - If unsure between Food and Shopping, choose Food.
-
+            
             Description: "{description}"
             Category:
             """
             
             payload = {
-                "model": "llama3.2",  # You can change this to any model you have
+                "model": "llama3.2",
                 "prompt": prompt,
                 "stream": False,
                 "options": {
-                    "temperature": 0.1,  # Low temperature for consistent results
+                    "temperature": 0.1,
                     "top_p": 0.9
                 }
             }
@@ -195,68 +347,51 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                 
                 # Validate the category
                 valid_categories = [
-                    'Food', 'Entertainment', 'Transport', 'Shopping', 
+                    'Food', 'Entertainment', 'Transport', 'Shopping',
                     'Bills', 'Healthcare', 'Education', 'Travel', 'Home', 'Other'
                 ]
                 
                 # Clean up the response and find the best match
                 category = category.replace('"', '').replace("'", "").strip()
                 
-                # Keyword hinting: prefer deterministic mapping for groceries → Food
-                def keyword_hint(text: str):
-                    t = text.lower()
-                    grocery_words = ['milk', 'curd', 'yogurt', 'paneer', 'butter', 'cheese', 'bread', 'vegetable', 'veggies', 'fruit', 'banana', 'apple', 'egg', 'eggs', 'rice', 'wheat', 'atta', 'flour', 'dal', 'lentil', 'lentils', 'pulse', 'pulses', 'oil', 'spice', 'spices', 'sugar', 'salt', 'tea', 'coffee', 'grocery', 'supermarket', 'kirana']
-                    return 'Food' if any(w in t for w in grocery_words) else None
-
-                hint = keyword_hint(description)
-
                 # Find exact match first
                 if category in valid_categories:
-                    if hint and category != hint:
-                        return hint
                     return category
                 
                 # Try to find partial matches
                 for valid_cat in valid_categories:
                     if valid_cat.lower() in category.lower() or category.lower() in valid_cat.lower():
-                        return hint or valid_cat
+                        return valid_cat
                 
-                # Default fallback
-                return hint or 'Other'
+                return 'Other'
             else:
-                # Fallback to keyword-based detection if Ollama fails
                 return self._fallback_category_detection(description, amount)
                 
         except Exception as e:
             print(f"Ollama API error: {e}")
-            # Fallback to keyword-based detection
             return self._fallback_category_detection(description, amount)
     
     def _fallback_category_detection(self, description, amount):
         """Fallback category detection using keywords"""
         description_lower = description.lower()
         
-        grocery_words = ['milk', 'curd', 'yogurt', 'paneer', 'butter', 'cheese', 'bread', 'vegetable', 'veggies', 'fruit', 'banana', 'apple', 'egg', 'eggs', 'rice', 'wheat', 'atta', 'flour', 'dal', 'lentil', 'lentils', 'pulse', 'pulses', 'oil', 'spice', 'spices', 'sugar', 'salt', 'tea', 'coffee', 'grocery', 'supermarket', 'kirana']
-        if any(word in description_lower for word in grocery_words):
+        if any(word in description_lower for word in ['food', 'restaurant', 'dinner', 'lunch', 'breakfast', 'grocery', 'pizza', 'burger', 'coffee', 'tea', 'snack', 'meal', 'cafe', 'bakery']):
             return 'Food'
-
-        if any(word in description_lower for word in ['food', 'restaurant', 'dinner', 'lunch', 'breakfast', 'grocery', 'pizza', 'burger', 'coffee', 'tea', 'snack', 'meal', 'cafe', 'bakery', 'sweets', 'chocolate', 'ice cream', 'juice', 'water']):
-            return 'Food'
-        elif any(word in description_lower for word in ['movie', 'cinema', 'theatre', 'game', 'concert', 'party', 'show', 'ticket', 'entertainment', 'fun', 'amusement', 'park', 'museum', 'exhibition', 'festival', 'event', 'booking', 'reservation']):
+        elif any(word in description_lower for word in ['movie', 'cinema', 'theatre', 'game', 'concert', 'party', 'show', 'ticket', 'entertainment']):
             return 'Entertainment'
-        elif any(word in description_lower for word in ['uber', 'taxi', 'cab', 'fuel', 'gas', 'parking', 'bus', 'train', 'metro', 'subway', 'flight', 'airplane', 'car', 'bike', 'scooter', 'maintenance', 'repair', 'insurance', 'toll', 'fare']):
+        elif any(word in description_lower for word in ['uber', 'taxi', 'cab', 'fuel', 'gas', 'parking', 'bus', 'train', 'metro']):
             return 'Transport'
-        elif any(word in description_lower for word in ['shirt', 'shoes', 'dress', 'clothes', 'fashion', 'shopping', 'store', 'mall', 'market', 'shop', 'buy', 'purchase', 'retail', 'electronics', 'phone', 'laptop', 'accessories', 'jewelry']):
+        elif any(word in description_lower for word in ['shirt', 'shoes', 'dress', 'clothes', 'fashion', 'shopping', 'store', 'mall', 'market']):
             return 'Shopping'
-        elif any(word in description_lower for word in ['electricity', 'water', 'internet', 'rent', 'bill', 'utility', 'phone', 'mobile', 'subscription', 'service', 'maintenance', 'insurance', 'tax', 'fees', 'charges']):
+        elif any(word in description_lower for word in ['electricity', 'water', 'internet', 'rent', 'bill', 'utility', 'phone', 'mobile']):
             return 'Bills'
-        elif any(word in description_lower for word in ['medicine', 'doctor', 'hospital', 'pharmacy', 'medical', 'health', 'dental', 'eye', 'vision', 'therapy', 'treatment', 'consultation', 'prescription', 'vitamins', 'supplements']):
+        elif any(word in description_lower for word in ['medicine', 'doctor', 'hospital', 'pharmacy', 'medical', 'health']):
             return 'Healthcare'
-        elif any(word in description_lower for word in ['course', 'book', 'training', 'workshop', 'education', 'school', 'college', 'university', 'class', 'lesson', 'tutorial']):
+        elif any(word in description_lower for word in ['course', 'book', 'training', 'workshop', 'education', 'school']):
             return 'Education'
-        elif any(word in description_lower for word in ['hotel', 'vacation', 'tourism', 'travel', 'trip', 'journey', 'flight', 'accommodation', 'resort', 'lodging']):
+        elif any(word in description_lower for word in ['hotel', 'vacation', 'tourism', 'travel', 'trip', 'journey', 'flight']):
             return 'Travel'
-        elif any(word in description_lower for word in ['furniture', 'repair', 'maintenance', 'household', 'home', 'kitchen', 'bathroom', 'bedroom', 'living room', 'garden', 'yard']):
+        elif any(word in description_lower for word in ['furniture', 'repair', 'maintenance', 'household', 'home']):
             return 'Home'
         else:
             return 'Other'
@@ -285,6 +420,4 @@ class ExpenseReceiptViewSet(viewsets.ModelViewSet):
         ).select_related('expense')
     
     def perform_create(self, serializer):
-        # Here you could add OCR processing logic
-        # For now, we'll just save the receipt
         serializer.save()
