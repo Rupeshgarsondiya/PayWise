@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logo from '../Photos/logo.png';
-import '../assets/css/Dashboard.css'; // Use Dashboard.css for consistent styling
+import '../assets/css/Expenses.css';
 
 const API_BASE_URL = 'http://127.0.0.1:8000/api/expenses';
 
@@ -34,12 +34,10 @@ const Expenses = () => {
   });
 
   useEffect(() => {
-    // Get user data from localStorage
     const userData = localStorage.getItem('user');
     if (userData) {
       setUser(JSON.parse(userData));
     }
-
     fetchExpenses();
     fetchCategories();
     fetchGroups();
@@ -51,10 +49,9 @@ const Expenses = () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
-    navigate('/login');
+    navigate('/');
   };
 
-  // Your existing functions remain the same...
   const fetchExpenses = async () => {
     try {
       const token = localStorage.getItem('access_token');
@@ -117,17 +114,11 @@ const Expenses = () => {
 
   const handleInputChange = (e) => {
     const { name, value, files } = e.target;
-    
     if (name === 'receipt_image') {
       const selectedFile = files?.[0];
       if (selectedFile) {
-        if (!selectedFile.type) {
-          alert('Invalid file format. Please select a valid image file.');
-          e.target.value = '';
-          return;
-        }
         if (!selectedFile.type.startsWith('image/')) {
-          alert('Please select a valid image file (JPG, PNG, WEBP, etc.)');
+          alert('Please select a valid image file');
           e.target.value = '';
           return;
         }
@@ -147,24 +138,17 @@ const Expenses = () => {
   };
 
   const handleAutomaticOCRScan = async (file) => {
-    if (!file || !file.type || !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
-      return;
-    }
-
     setOcrLoading(true);
     try {
       const formDataOCR = new FormData();
-      formDataOCR.append('receipt_image', file, file.name);
+      formDataOCR.append('receipt_image', file);
       const token = localStorage.getItem('access_token');
-      
       const response = await fetch(`${API_BASE_URL}/expenses/scan_receipt/`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formDataOCR
       });
-
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      
       const result = await response.json();
       if (result.success) {
         alert(`✅ SUCCESS! ${result.message}`);
@@ -183,7 +167,6 @@ const Expenses = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const submitFormData = new FormData();
       Object.keys(formData).forEach(key => {
@@ -191,19 +174,14 @@ const Expenses = () => {
           submitFormData.append(key, formData[key]);
         }
       });
-
       const token = localStorage.getItem('access_token');
-      const url = editingExpense 
-        ? `${API_BASE_URL}/expenses/${editingExpense.id}/` 
-        : `${API_BASE_URL}/expenses/`;
+      const url = editingExpense ? `${API_BASE_URL}/expenses/${editingExpense.id}/` : `${API_BASE_URL}/expenses/`;
       const method = editingExpense ? 'PATCH' : 'POST';
-
       const response = await fetch(url, {
         method,
         headers: { 'Authorization': `Bearer ${token}` },
         body: submitFormData
       });
-
       if (response.ok) {
         alert(editingExpense ? 'Expense updated!' : 'Expense added!');
         setShowExpenseForm(false);
@@ -244,7 +222,6 @@ const Expenses = () => {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
-
         if (response.ok) {
           alert('Expense deleted!');
           fetchExpenses();
@@ -277,8 +254,8 @@ const Expenses = () => {
   };
 
   return (
-    <div className="dashboard-container">
-      {/* EXACT SAME SIDEBAR AS DASHBOARD */}
+    <div className="dashboard">
+      {/* ===== EXACT SAME SIDEBAR AS DASHBOARD ===== */}
       <div className="dashboard-sidebar">
         <div className="sidebar-header">
           <div className="logo-container">
@@ -299,16 +276,11 @@ const Expenses = () => {
         <nav className="sidebar-nav">
           <div className="nav-section">
             <h5 className="nav-section-title">MAIN</h5>
-            <button 
-              className="nav-item"
-              onClick={() => navigate('/dashboard')}
-            >
+            <button className="nav-item" onClick={() => navigate('/dashboard')}>
               <span className="nav-icon">📊</span>
               <span className="nav-text">Overview</span>
             </button>
-            <button 
-              className="nav-item active"
-            >
+            <button className="nav-item active">
               <span className="nav-icon">💰</span>
               <span className="nav-text">Expenses</span>
               <span className="nav-indicator"></span>
@@ -359,155 +331,291 @@ const Expenses = () => {
         </div>
       </div>
 
-      {/* Main Content Container */}
+      {/* ===== MAIN CONTENT CONTAINER ===== */}
       <div className="dashboard-main-container">
-        {/* Premium Header */}
+        {/* ===== PREMIUM HEADER ===== */}
         <div className="dashboard-header">
-          <div className="header-left">
-            <div className="greeting-section">
-              <h1>💰 Expense Management</h1>
-              <p className="header-subtitle">Track and manage your expenses efficiently</p>
-            </div>
+          <div className="header-content">
+            <h1>💰 Expenses</h1>
+            <p>Track and manage your expenses efficiently</p>
           </div>
-          
-          <div className="header-right">
+          <div className="header-actions">
             <button 
-              className="quick-add-btn" 
+              className="action-btn primary"
               onClick={() => setShowExpenseForm(true)}
             >
-              <span className="btn-icon">➕</span>
-              <span className="btn-text">Add Expense</span>
+              <span>➕</span>
+              Add Expense
             </button>
-            <div className="notification-bell">
-              <span className="bell-icon">🔔</span>
-              <span className="notification-badge">3</span>
+          </div>
+          <div className="user-menu">
+            <div className="user-avatar">
+              {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+            </div>
+            <div className="user-info">
+              <div className="user-name">{user?.name || 'User'}</div>
+              <div className="user-email">{user?.email || 'user@paywise.com'}</div>
             </div>
           </div>
         </div>
 
-        {/* Premium Content */}
-        <div className="dashboard-content">
-          {/* Hero Stats Section */}
-          <section className="hero-stats">
-            <div className="stat-card primary">
-              <div className="stat-icon">💰</div>
-              <div className="stat-content">
+        {/* ===== MAIN CONTENT ===== */}
+        <div className="dashboard-main">
+          {/* ===== BALANCE CARDS ===== */}
+          <div className="balance-cards">
+            <div className="balance-card positive">
+              <div className="card-icon">💰</div>
+              <div className="card-content">
                 <h3>Total Expenses</h3>
-                <p className="stat-amount">{formatCurrency(summary.total_expenses)}</p>
-                <span className="stat-label">All time spending</span>
+                <div className="amount">{formatCurrency(summary.total_expenses)}</div>
+                <p>All time spending</p>
               </div>
-              <div className="stat-trend up">↗ 12%</div>
             </div>
 
-            <div className="stat-card success">
-              <div className="stat-icon">📅</div>
-              <div className="stat-content">
+            <div className="balance-card neutral">
+              <div className="card-icon">📅</div>
+              <div className="card-content">
                 <h3>This Month</h3>
-                <p className="stat-amount">{formatCurrency(summary.month_expenses)}</p>
-                <span className="stat-label">Current month spending</span>
+                <div className="amount">{formatCurrency(summary.month_expenses)}</div>
+                <p>Current month spending</p>
               </div>
-              <div className="stat-trend down">↘ 8%</div>
             </div>
 
-            <div className="stat-card info">
-              <div className="stat-icon">📝</div>
-              <div className="stat-content">
+            <div className="balance-card positive">
+              <div className="card-icon">📊</div>
+              <div className="card-content">
                 <h3>Total Count</h3>
-                <p className="stat-count">{summary.total_count}</p>
-                <span className="stat-label">Total expenses recorded</span>
+                <div className="amount">{summary.total_count}</div>
+                <p>Total expenses recorded</p>
               </div>
-              <div className="stat-trend neutral">—</div>
             </div>
 
-            <div className="stat-card warning">
-              <div className="stat-icon">🤝</div>
-              <div className="stat-content">
-                <h3>Amount Owed</h3>
-                <p className="stat-amount">{formatCurrency(summary.owed_amount)}</p>
-                <span className="stat-label">From group expenses</span>
+            <div className="balance-card neutral">
+              <div className="card-icon">🤝</div>
+              <div className="card-content">
+                <h3>Owed Amount</h3>
+                <div className="amount">{formatCurrency(summary.owed_amount)}</div>
+                <p>From group expenses</p>
               </div>
-              <div className="stat-trend up">↗ 2</div>
             </div>
-          </section>
+          </div>
 
-          {/* Recent Expenses List */}
-          <div className="dashboard-card recent-activity">
-            <div className="card-header">
-              <h2>📋 Recent Expenses</h2>
-              <button 
-                className="view-all-btn" 
-                onClick={() => setShowExpenseForm(true)}
-              >
-                Add Expense →
-              </button>
-            </div>
-            <div className="activity-content">
-              {expenses.length === 0 ? (
-                <div className="empty-activity">
-                  <div className="empty-icon">📝</div>
-                  <h3>No expenses yet</h3>
+          {/* ===== RECENT ACTIVITY ===== */}
+          <div className="recent-activity">
+            <h2>📋 Recent Expenses</h2>
+            <div className="activity-list">
+              {expenses.length > 0 ? expenses.map(expense => (
+                <div key={expense.id} className="activity-item">
+                  <div className="activity-icon">
+                    {expense.category?.icon || '💰'}
+                  </div>
+                  <div className="activity-details">
+                    <h4>{expense.description}</h4>
+                    <p>
+                      {expense.date} • {expense.category?.name || expense.ai_detected_category || 'Other'}
+                      {expense.group && ` • ${expense.group.name}`}
+                      {expense.payment_method && ` • ${expense.payment_method}`}
+                    </p>
+                    {expense.notes && (
+                      <small style={{ color: '#6b7280', fontStyle: 'italic' }}>
+                        {expense.notes}
+                      </small>
+                    )}
+                  </div>
+                  <div className="activity-amount">
+                    {formatCurrency(expense.amount)}
+                  </div>
+                  <div className="expense-actions">
+                    <button 
+                      className="action-btn secondary"
+                      onClick={() => handleEdit(expense)}
+                      title="Edit expense"
+                    >
+                      ✏️
+                    </button>
+                    <button 
+                      className="action-btn danger"
+                      onClick={() => handleDelete(expense.id)}
+                      title="Delete expense"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              )) : (
+                <div className="empty-state">
+                  <div className="empty-icon">💸</div>
+                  <h3>No Expenses Yet</h3>
                   <p>Add your first expense to get started!</p>
                   <button 
-                    className="add-expense-link" 
+                    className="action-btn primary"
                     onClick={() => setShowExpenseForm(true)}
                   >
-                    Add First Expense
+                    ➕ Add First Expense
                   </button>
                 </div>
-              ) : (
-                expenses.map(expense => (
-                  <div key={expense.id} className="activity-item">
-                    <div className="activity-icon">
-                      {expense.category?.icon || '📝'}
-                    </div>
-                    <div className="activity-details">
-                      <h4>{expense.description}</h4>
-                      <p>
-                        {expense.date} • {expense.category?.name || expense.ai_detected_category || 'Other'}
-                        {expense.group && ` • ${expense.group.name}`}
-                        {expense.payment_method && ` • ${expense.payment_method}`}
-                      </p>
-                      {expense.notes && (
-                        <p style={{ fontStyle: 'italic', color: '#6b7280', marginTop: '4px' }}>
-                          {expense.notes}
-                        </p>
-                      )}
-                    </div>
-                    <div className="activity-amount">
-                      {formatCurrency(expense.amount)}
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
-                      <button 
-                        onClick={() => handleEdit(expense)}
-                        className="action-btn secondary"
-                        style={{ padding: '6px 12px', fontSize: '12px', minWidth: 'auto' }}
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(expense.id)}
-                        className="action-btn secondary"
-                        style={{ 
-                          padding: '6px 12px', 
-                          fontSize: '12px', 
-                          minWidth: 'auto',
-                          background: '#ef4444',
-                          color: 'white',
-                          border: '1px solid #ef4444'
-                        }}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                ))
               )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Your existing modal/form code remains the same */}
+      {/* ===== EXPENSE FORM MODAL ===== */}
+      {showExpenseForm && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2>{editingExpense ? 'Edit Expense' : 'Add New Expense'}</h2>
+              <button 
+                className="close-btn"
+                onClick={() => {
+                  setShowExpenseForm(false);
+                  setEditingExpense(null);
+                  resetForm();
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <form onSubmit={handleSubmit} className="expense-form">
+              <div className="form-group">
+                <label>Description *</label>
+                <input
+                  type="text"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  required
+                  placeholder="Enter expense description"
+                />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Amount *</label>
+                  <input
+                    type="number"
+                    name="amount"
+                    value={formData.amount}
+                    onChange={handleInputChange}
+                    required
+                    step="0.01"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Date *</label>
+                  <input
+                    type="date"
+                    name="date"
+                    value={formData.date}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Category</label>
+                  <select
+                    name="category_id"
+                    value={formData.category_id}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Select Category</option>
+                    {categories.map(category => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Group (Optional)</label>
+                  <select
+                    name="group_id"
+                    value={formData.group_id}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Select Group</option>
+                    {groups.map(group => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Payment Method</label>
+                <select
+                  name="payment_method"
+                  value={formData.payment_method}
+                  onChange={handleInputChange}
+                >
+                  <option value="">Select Payment Method</option>
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="upi">UPI</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Notes</label>
+                <textarea
+                  name="notes"
+                  value={formData.notes}
+                  onChange={handleInputChange}
+                  rows="3"
+                  placeholder="Additional notes (optional)"
+                ></textarea>
+              </div>
+
+              <div className="form-group">
+                <label>Receipt Image</label>
+                <input
+                  type="file"
+                  name="receipt_image"
+                  onChange={handleInputChange}
+                  accept="image/*"
+                  className="file-input"
+                />
+                {ocrLoading && (
+                  <div className="ocr-loading">
+                    <span>🔄</span>
+                    Processing receipt with OCR...
+                  </div>
+                )}
+              </div>
+
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="action-btn secondary"
+                  onClick={() => {
+                    setShowExpenseForm(false);
+                    setEditingExpense(null);
+                    resetForm();
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="action-btn primary"
+                  disabled={loading}
+                >
+                  {loading ? 'Saving...' : editingExpense ? 'Update Expense' : 'Add Expense'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
