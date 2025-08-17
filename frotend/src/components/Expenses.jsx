@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import '../assets/css/Expenses.css';
+import { useNavigate } from 'react-router-dom';
+import logo from '../Photos/logo.png';
+import '../assets/css/Dashboard.css'; // Use Dashboard.css for consistent styling
 
 const API_BASE_URL = 'http://127.0.0.1:8000/api/expenses';
 
 const Expenses = () => {
+  const navigate = useNavigate();
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -11,6 +14,7 @@ const Expenses = () => {
   const [loading, setLoading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
+  const [user, setUser] = useState(null);
   const [summary, setSummary] = useState({
     total_expenses: 0,
     month_expenses: 0,
@@ -30,19 +34,32 @@ const Expenses = () => {
   });
 
   useEffect(() => {
+    // Get user data from localStorage
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      setUser(JSON.parse(userData));
+    }
+
     fetchExpenses();
     fetchCategories();
     fetchGroups();
     fetchSummary();
   }, []);
 
+  // Navigation handlers
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
+  // Your existing functions remain the same...
   const fetchExpenses = async () => {
     try {
       const token = localStorage.getItem('access_token');
       const response = await fetch(`${API_BASE_URL}/expenses/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
@@ -57,9 +74,7 @@ const Expenses = () => {
     try {
       const token = localStorage.getItem('access_token');
       const response = await fetch(`${API_BASE_URL}/categories/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
@@ -74,9 +89,7 @@ const Expenses = () => {
     try {
       const token = localStorage.getItem('access_token');
       const response = await fetch(`${API_BASE_URL}/groups/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
@@ -91,9 +104,7 @@ const Expenses = () => {
     try {
       const token = localStorage.getItem('access_token');
       const response = await fetch(`${API_BASE_URL}/expenses/summary/`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const data = await response.json();
@@ -104,38 +115,28 @@ const Expenses = () => {
     }
   };
 
-  // ✅ FIXED: Enhanced input change handler with proper file validation
   const handleInputChange = (e) => {
     const { name, value, files } = e.target;
     
     if (name === 'receipt_image') {
       const selectedFile = files?.[0];
-      
       if (selectedFile) {
-        // ✅ FIX: Check if file.type exists before using startsWith
         if (!selectedFile.type) {
           alert('Invalid file format. Please select a valid image file.');
-          e.target.value = ''; // Clear the input
+          e.target.value = '';
           return;
         }
-        
-        // ✅ FIX: Now safely check file type
         if (!selectedFile.type.startsWith('image/')) {
           alert('Please select a valid image file (JPG, PNG, WEBP, etc.)');
-          e.target.value = ''; // Clear the input
+          e.target.value = '';
           return;
         }
-        
-        // ✅ FIX: Check file size
         if (selectedFile.size > 10 * 1024 * 1024) {
           alert('File size too large. Please select an image under 10MB.');
-          e.target.value = ''; // Clear the input
+          e.target.value = '';
           return;
         }
-        
         setFormData(prev => ({ ...prev, [name]: selectedFile }));
-        
-        // Trigger automatic OCR scan
         handleAutomaticOCRScan(selectedFile);
       } else {
         setFormData(prev => ({ ...prev, [name]: null }));
@@ -145,82 +146,35 @@ const Expenses = () => {
     }
   };
 
-  // ✅ COMPLETELY FIXED: OCR scanning function with comprehensive error handling
   const handleAutomaticOCRScan = async (file) => {
-    console.log('File received:', file);
-    
-    // ✅ FIX: Enhanced validation with null/undefined checks
-    if (!file) {
-      alert('Please select an image file first');
-      return;
-    }
-
-    // ✅ FIX: Check if file.type exists before using startsWith
-    if (!file.type) {
-      alert('Invalid file format. Please select a valid image file.');
-      return;
-    }
-
-    // ✅ FIX: Now safely check file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file (JPG, PNG, etc.)');
-      return;
-    }
-
-    // ✅ FIX: Validate file size with proper checks
-    if (file.size && file.size > 10 * 1024 * 1024) {
-      alert('File size too large. Please select an image under 10MB.');
+    if (!file || !file.type || !file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
       return;
     }
 
     setOcrLoading(true);
-    
     try {
       const formDataOCR = new FormData();
       formDataOCR.append('receipt_image', file, file.name);
-
-      // Debug: Log FormData contents
-      console.log('FormData contents:');
-      for (let [key, value] of formDataOCR.entries()) {
-        console.log(key, value);
-      }
-
       const token = localStorage.getItem('access_token');
-      console.log('Making OCR request to:', `${API_BASE_URL}/expenses/scan_receipt/`);
       
       const response = await fetch(`${API_BASE_URL}/expenses/scan_receipt/`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-          // Don't set Content-Type for FormData - let browser set it
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formDataOCR
       });
 
-      console.log('Response status:', response.status);
-      
-      // ✅ FIX: Better error handling for HTTP errors
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       
       const result = await response.json();
-      console.log('Response data:', result);
-
       if (result.success) {
         alert(`✅ SUCCESS! ${result.message}`);
-        // Refresh the expenses list and summary to show the new expense
         await fetchExpenses();
         await fetchSummary();
-        console.log('Created expense:', result.expense_created);
-        console.log('OCR data:', result.ocr_data);
       } else {
-        alert(`❌ OCR Failed: ${result.message || result.error || 'Unknown error'}`);
-        console.error('OCR Error Details:', result);
+        alert(`❌ OCR Failed: ${result.message || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('OCR Request Error:', error);
-      alert(`🚫 Network error: ${error.message}. Please check your connection and try again.`);
+      alert(`🚫 Network error: ${error.message}`);
     } finally {
       setOcrLoading(false);
     }
@@ -232,8 +186,6 @@ const Expenses = () => {
 
     try {
       const submitFormData = new FormData();
-      
-      // Add all form fields
       Object.keys(formData).forEach(key => {
         if (formData[key] !== null && formData[key] !== '') {
           submitFormData.append(key, formData[key]);
@@ -248,32 +200,27 @@ const Expenses = () => {
 
       const response = await fetch(url, {
         method,
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: submitFormData
       });
 
       if (response.ok) {
-        alert(editingExpense ? 'Expense updated successfully!' : 'Expense added successfully!');
+        alert(editingExpense ? 'Expense updated!' : 'Expense added!');
         setShowExpenseForm(false);
         setEditingExpense(null);
         resetForm();
         fetchExpenses();
         fetchSummary();
       } else {
-        const errorData = await response.json();
-        alert('Error: ' + JSON.stringify(errorData));
+        alert('Error: Please try again');
       }
     } catch (error) {
-      console.error('Error submitting expense:', error);
       alert('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper functions
   const handleEdit = (expense) => {
     setEditingExpense(expense);
     setFormData({
@@ -290,26 +237,21 @@ const Expenses = () => {
   };
 
   const handleDelete = async (expenseId) => {
-    if (window.confirm('Are you sure you want to delete this expense?')) {
+    if (window.confirm('Delete this expense?')) {
       try {
         const token = localStorage.getItem('access_token');
         const response = await fetch(`${API_BASE_URL}/expenses/${expenseId}/`, {
           method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (response.ok) {
-          alert('Expense deleted successfully!');
+          alert('Expense deleted!');
           fetchExpenses();
           fetchSummary();
-        } else {
-          alert('Error deleting expense');
         }
       } catch (error) {
-        console.error('Error deleting expense:', error);
-        alert('Something went wrong. Please try again.');
+        alert('Error deleting expense');
       }
     }
   };
@@ -335,268 +277,237 @@ const Expenses = () => {
   };
 
   return (
-    <div className="expenses-container">
-      {/* Navigation */}
-      <nav className="expense-nav">
-        <h1>💰 PayWise - Expenses</h1>
-        <button 
-          onClick={() => setShowExpenseForm(true)}
-          className="add-expense-btn"
-        >
-          ➕ Add New Expense
-        </button>
-      </nav>
-
-      {/* Summary Cards */}
-      <div className="summary-section">
-        <div className="summary-card">
-          <h3>💰 Total Expenses</h3>
-          <p>{formatCurrency(summary.total_expenses)}</p>
-        </div>
-        <div className="summary-card">
-          <h3>📅 This Month</h3>
-          <p>{formatCurrency(summary.month_expenses)}</p>
-        </div>
-        <div className="summary-card">
-          <h3>📝 Total Count</h3>
-          <p>{summary.total_count}</p>
-        </div>
-        <div className="summary-card">
-          <h3>🤝 Amount Owed</h3>
-          <p>{formatCurrency(summary.owed_amount)}</p>
-        </div>
-      </div>
-
-      {/* Expense Form Modal */}
-      {showExpenseForm && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h2>{editingExpense ? '✏️ Edit Expense' : '➕ Add New Expense'}</h2>
-              <button 
-                onClick={() => {
-                  setShowExpenseForm(false);
-                  setEditingExpense(null);
-                  resetForm();
-                }}
-                className="close-btn"
-              >
-                ✕
-              </button>
+    <div className="dashboard-container">
+      {/* EXACT SAME SIDEBAR AS DASHBOARD */}
+      <div className="dashboard-sidebar">
+        <div className="sidebar-header">
+          <div className="logo-container">
+            <img src={logo} alt="PayWise Logo" className="logo-img" />
+            <h2 className="logo-text">PayWise</h2>
+          </div>
+          <div className="user-profile">
+            <div className="user-avatar-large">
+              {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
             </div>
-
-            <form onSubmit={handleSubmit} className="expense-form">
-              <div className="form-group">
-                <label htmlFor="description">📝 Description *</label>
-                <input
-                  type="text"
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="Enter expense description"
-                  required
-                />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="amount">💰 Amount *</label>
-                  <input
-                    type="number"
-                    id="amount"
-                    name="amount"
-                    value={formData.amount}
-                    onChange={handleInputChange}
-                    placeholder="0.00"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="date">📅 Date *</label>
-                  <input
-                    type="date"
-                    id="date"
-                    name="date"
-                    value={formData.date}
-                    onChange={handleInputChange}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="category_id">🏷️ Category</label>
-                  <select
-                    id="category_id"
-                    name="category_id"
-                    value={formData.category_id}
-                    onChange={handleInputChange}
-                  >
-                    <option value="">Select Category</option>
-                    {categories.map(category => (
-                      <option key={category.id} value={category.id}>
-                        {category.icon} {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="group_id">👥 Group</label>
-                  <select
-                    id="group_id"
-                    name="group_id"
-                    value={formData.group_id}
-                    onChange={handleInputChange}
-                  >
-                    <option value="">Personal (No Group)</option>
-                    {groups.map(group => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="payment_method">💳 Payment Method</label>
-                <input
-                  type="text"
-                  id="payment_method"
-                  name="payment_method"
-                  value={formData.payment_method}
-                  onChange={handleInputChange}
-                  placeholder="e.g., Cash, Credit Card, UPI"
-                />
-              </div>
-
-              {/* ✅ FIXED: Receipt upload with proper validation */}
-              <div className="form-group">
-                <label htmlFor="receipt_image">📷 Receipt Image (Auto OCR)</label>
-                <input
-                  type="file"
-                  id="receipt_image"
-                  name="receipt_image"
-                  onChange={handleInputChange}
-                  accept="image/*"
-                  className="file-input"
-                />
-                <p className="file-help">
-                  📸 Upload receipt for automatic data extraction
-                </p>
-                {ocrLoading && (
-                  <div className="ocr-loading">
-                    ⏳ Processing receipt with AI OCR...
-                  </div>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="notes">📋 Notes</label>
-                <textarea
-                  id="notes"
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleInputChange}
-                  placeholder="Additional notes about this expense"
-                  rows="3"
-                />
-              </div>
-
-              <div className="form-actions">
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setShowExpenseForm(false);
-                    setEditingExpense(null);
-                    resetForm();
-                  }}
-                  className="cancel-btn"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={loading}
-                  className="submit-btn"
-                >
-                  {loading ? '⏳ Processing...' : (editingExpense ? '💾 Update' : '➕ Add Expense')}
-                </button>
-              </div>
-            </form>
+            <div className="user-details">
+              <h4>{user?.name || 'User'}</h4>
+              <p>{user?.email || 'user@paywise.com'}</p>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Expenses List */}
-      <div className="expenses-list">
-        <h2>📋 Recent Expenses</h2>
-        {expenses.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">📝</div>
-            <h3>No expenses yet</h3>
-            <p>Add your first expense to get started!</p>
+        <nav className="sidebar-nav">
+          <div className="nav-section">
+            <h5 className="nav-section-title">MAIN</h5>
             <button 
-              onClick={() => setShowExpenseForm(true)}
-              className="add-first-expense-btn"
+              className="nav-item"
+              onClick={() => navigate('/dashboard')}
             >
-              ➕ Add First Expense
+              <span className="nav-icon">📊</span>
+              <span className="nav-text">Overview</span>
+            </button>
+            <button 
+              className="nav-item active"
+            >
+              <span className="nav-icon">💰</span>
+              <span className="nav-text">Expenses</span>
+              <span className="nav-indicator"></span>
+            </button>
+            <button 
+              className="nav-item"
+              onClick={() => navigate('/groups')}
+            >
+              <span className="nav-icon">👥</span>
+              <span className="nav-text">Groups</span>
+            </button>
+            <button 
+              className="nav-item"
+              onClick={() => navigate('/reports')}
+            >
+              <span className="nav-icon">📈</span>
+              <span className="nav-text">Reports</span>
             </button>
           </div>
-        ) : (
-          <div className="expenses-grid">
-            {expenses.map(expense => (
-              <div key={expense.id} className="expense-card">
-                <div className="expense-header">
-                  <div className="expense-category">
-                    {expense.category?.icon || '📝'} {expense.category?.name || expense.ai_detected_category || 'Other'}
-                  </div>
-                  <div className="expense-amount">
-                    {formatCurrency(expense.amount)}
-                  </div>
-                </div>
-                
-                <div className="expense-content">
-                  <h3 className="expense-description">{expense.description}</h3>
-                  <div className="expense-meta">
-                    <span className="expense-date">📅 {expense.date}</span>
-                    {expense.group && (
-                      <span className="expense-group">👥 {expense.group.name}</span>
-                    )}
-                    {expense.payment_method && (
-                      <span className="expense-payment">💳 {expense.payment_method}</span>
-                    )}
-                  </div>
-                  {expense.notes && (
-                    <p className="expense-notes">{expense.notes}</p>
-                  )}
-                </div>
-                
-                <div className="expense-actions">
-                  <button 
-                    onClick={() => handleEdit(expense)}
-                    className="edit-btn"
-                  >
-                    ✏️ Edit
-                  </button>
-                  <button 
-                    onClick={() => handleDelete(expense.id)}
-                    className="delete-btn"
-                  >
-                    🗑️ Delete
-                  </button>
-                </div>
-              </div>
-            ))}
+
+          <div className="nav-section">
+            <h5 className="nav-section-title">QUICK ACTIONS</h5>
+            <button 
+              className="nav-item quick-action" 
+              onClick={() => setShowExpenseForm(true)}
+            >
+              <span className="nav-icon">➕</span>
+              <span className="nav-text">Add Expense</span>
+            </button>
+            <button className="nav-item quick-action">
+              <span className="nav-icon">📤</span>
+              <span className="nav-text">Split Bill</span>
+            </button>
           </div>
-        )}
+        </nav>
+
+        <div className="sidebar-footer">
+          <button 
+            className="nav-item logout-item"
+            onClick={handleLogout}
+          >
+            <span className="nav-icon">🚪</span>
+            <span className="nav-text">Logout</span>
+          </button>
+          <div className="version-info">
+            <p>PayWise v2.1.0</p>
+          </div>
+        </div>
       </div>
+
+      {/* Main Content Container */}
+      <div className="dashboard-main-container">
+        {/* Premium Header */}
+        <div className="dashboard-header">
+          <div className="header-left">
+            <div className="greeting-section">
+              <h1>💰 Expense Management</h1>
+              <p className="header-subtitle">Track and manage your expenses efficiently</p>
+            </div>
+          </div>
+          
+          <div className="header-right">
+            <button 
+              className="quick-add-btn" 
+              onClick={() => setShowExpenseForm(true)}
+            >
+              <span className="btn-icon">➕</span>
+              <span className="btn-text">Add Expense</span>
+            </button>
+            <div className="notification-bell">
+              <span className="bell-icon">🔔</span>
+              <span className="notification-badge">3</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Premium Content */}
+        <div className="dashboard-content">
+          {/* Hero Stats Section */}
+          <section className="hero-stats">
+            <div className="stat-card primary">
+              <div className="stat-icon">💰</div>
+              <div className="stat-content">
+                <h3>Total Expenses</h3>
+                <p className="stat-amount">{formatCurrency(summary.total_expenses)}</p>
+                <span className="stat-label">All time spending</span>
+              </div>
+              <div className="stat-trend up">↗ 12%</div>
+            </div>
+
+            <div className="stat-card success">
+              <div className="stat-icon">📅</div>
+              <div className="stat-content">
+                <h3>This Month</h3>
+                <p className="stat-amount">{formatCurrency(summary.month_expenses)}</p>
+                <span className="stat-label">Current month spending</span>
+              </div>
+              <div className="stat-trend down">↘ 8%</div>
+            </div>
+
+            <div className="stat-card info">
+              <div className="stat-icon">📝</div>
+              <div className="stat-content">
+                <h3>Total Count</h3>
+                <p className="stat-count">{summary.total_count}</p>
+                <span className="stat-label">Total expenses recorded</span>
+              </div>
+              <div className="stat-trend neutral">—</div>
+            </div>
+
+            <div className="stat-card warning">
+              <div className="stat-icon">🤝</div>
+              <div className="stat-content">
+                <h3>Amount Owed</h3>
+                <p className="stat-amount">{formatCurrency(summary.owed_amount)}</p>
+                <span className="stat-label">From group expenses</span>
+              </div>
+              <div className="stat-trend up">↗ 2</div>
+            </div>
+          </section>
+
+          {/* Recent Expenses List */}
+          <div className="dashboard-card recent-activity">
+            <div className="card-header">
+              <h2>📋 Recent Expenses</h2>
+              <button 
+                className="view-all-btn" 
+                onClick={() => setShowExpenseForm(true)}
+              >
+                Add Expense →
+              </button>
+            </div>
+            <div className="activity-content">
+              {expenses.length === 0 ? (
+                <div className="empty-activity">
+                  <div className="empty-icon">📝</div>
+                  <h3>No expenses yet</h3>
+                  <p>Add your first expense to get started!</p>
+                  <button 
+                    className="add-expense-link" 
+                    onClick={() => setShowExpenseForm(true)}
+                  >
+                    Add First Expense
+                  </button>
+                </div>
+              ) : (
+                expenses.map(expense => (
+                  <div key={expense.id} className="activity-item">
+                    <div className="activity-icon">
+                      {expense.category?.icon || '📝'}
+                    </div>
+                    <div className="activity-details">
+                      <h4>{expense.description}</h4>
+                      <p>
+                        {expense.date} • {expense.category?.name || expense.ai_detected_category || 'Other'}
+                        {expense.group && ` • ${expense.group.name}`}
+                        {expense.payment_method && ` • ${expense.payment_method}`}
+                      </p>
+                      {expense.notes && (
+                        <p style={{ fontStyle: 'italic', color: '#6b7280', marginTop: '4px' }}>
+                          {expense.notes}
+                        </p>
+                      )}
+                    </div>
+                    <div className="activity-amount">
+                      {formatCurrency(expense.amount)}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', marginLeft: '16px' }}>
+                      <button 
+                        onClick={() => handleEdit(expense)}
+                        className="action-btn secondary"
+                        style={{ padding: '6px 12px', fontSize: '12px', minWidth: 'auto' }}
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(expense.id)}
+                        className="action-btn secondary"
+                        style={{ 
+                          padding: '6px 12px', 
+                          fontSize: '12px', 
+                          minWidth: 'auto',
+                          background: '#ef4444',
+                          color: 'white',
+                          border: '1px solid #ef4444'
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Your existing modal/form code remains the same */}
     </div>
   );
 };
